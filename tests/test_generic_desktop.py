@@ -42,7 +42,13 @@ class GenericDesktopTests(unittest.TestCase):
     def run_omdrop(self, *args):
         return subprocess.run([OMDROP, *args], env=self.env, capture_output=True, text=True)
 
-    def logged(self):
+    def logged(self, min_entries=1):
+        import time
+        for _ in range(25):
+            lines = self.log.read_text().splitlines() if self.log.exists() else []
+            if len(lines) >= min_entries:
+                return lines
+            time.sleep(0.01)
         return self.log.read_text().splitlines() if self.log.exists() else []
 
     def test_notify_send_called_when_omarchy_notification_missing(self):
@@ -53,11 +59,26 @@ class GenericDesktopTests(unittest.TestCase):
         res = self.run_omdrop("handle", str(test_file))
         self.assertEqual(res.returncode, 0, res.stderr)
 
-        logs = self.logged()
+        logs = self.logged(min_entries=2)
         self.assertTrue(any("notify-send|" in l and "AirDrop Received" in l for l in logs), logs)
         self.assertTrue(any("photo.jpg" in l for l in logs), logs)
         self.assertTrue(any("-a AirDrop" in l for l in logs), logs)
         self.assertTrue(any(f"-i {test_file}" in l for l in logs), logs)
+        self.assertTrue(any("-A open=Open File" in l for l in logs), logs)
+        self.assertTrue(any("-A browse=Open in Folder" in l for l in logs), logs)
+
+    def test_notify_send_link_file_actions(self):
+        self.mock_cmd("notify-send")
+        link = self.root / "web.url"
+        link.write_bytes(b"[InternetShortcut]\r\nURL=https://example.com/item\r\n")
+
+        res = self.run_omdrop("handle", str(link))
+        self.assertEqual(res.returncode, 0, res.stderr)
+
+        logs = self.logged(min_entries=2)
+        self.assertTrue(any("notify-send|" in l and "AirDrop Link Received" in l for l in logs), logs)
+        self.assertTrue(any("-A open=Open in Browser" in l for l in logs), logs)
+        self.assertTrue(any("-A browse=Open in Folder" in l for l in logs), logs)
 
     def test_xdg_open_called_when_omarchy_browser_missing(self):
         self.mock_cmd("xdg-open")

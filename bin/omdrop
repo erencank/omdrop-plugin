@@ -2571,16 +2571,34 @@ act_notify() {
   local what="Saved to $(tildify "$(dirname "$f")")/"
   command -v wl-copy >/dev/null 2>&1 && what="Copied to clipboard, saved to $(tildify "$(dirname "$f")")/"
   local title="AirDrop Received"
+  local open_label="Open File"
   local desc="$(basename "$f")"$'\n'"$what"
+
+  if is_link_file "$f"; then
+    title="AirDrop Link Received"
+    open_label="Open in Browser"
+    local url; url=$(link_target "$f")
+    [[ -n "$url" ]] && desc="$url"$'\n'"$what"
+  fi
+
   if command -v omarchy-notification-send >/dev/null 2>&1; then
     omarchy-notification-send -t 8000 "$title" "$desc (or click this)" \
       "${args[@]}" --exec "$SELF" act open "$f" >/dev/null \
       || echo "omdrop: notification failed for $f" >&2
   elif command -v notify-send >/dev/null 2>&1; then
-    local notify_args=(-a "AirDrop" -t 8000)
+    local notify_args=(-a "AirDrop" -t 15000)
     [[ ${#args[@]} -gt 0 ]] && notify_args+=(-i "$f")
-    notify-send "${notify_args[@]}" "$title" "$desc" >/dev/null 2>&1 \
-      || echo "omdrop: notification failed for $f" >&2
+    (
+      local action
+      action=$(notify-send "${notify_args[@]}" \
+        -A "open=$open_label" \
+        -A "browse=Open in Folder" \
+        "$title" "$desc" 2>/dev/null)
+      case "$action" in
+        open|default) "$SELF" act open "$f" ;;
+        browse)       "$SELF" act browse "$f" ;;
+      esac
+    ) </dev/null >/dev/null 2>&1 &
   else
     echo "omdrop: notification failed for $f" >&2
   fi
