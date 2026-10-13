@@ -520,8 +520,11 @@ identity_unlock() { exec 8>&-; }
 identity_notice() {
   local msg=$1
   printf '%s\n' "$msg" >&2
-  command -v omarchy-notification-send >/dev/null 2>&1 \
-    && omarchy-notification-send -t 8000 "Omdrop" "$msg" >/dev/null 2>&1
+  if command -v omarchy-notification-send >/dev/null 2>&1; then
+    omarchy-notification-send -t 8000 "Omdrop" "$msg" >/dev/null 2>&1
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send -a "AirDrop" -t 8000 "Omdrop" "$msg" >/dev/null 2>&1 &
+  fi
   return 0
 }
 
@@ -2295,7 +2298,11 @@ act_open() {
 cmd_open_link() {
   local f=${1:?usage: omdrop open-link FILE} url raw why
   if url=$(link_target "$f"); then
-    omarchy-launch-browser "$url" >/dev/null 2>&1
+    if command -v omarchy-launch-browser >/dev/null 2>&1; then
+      omarchy-launch-browser "$url" >/dev/null 2>&1
+    else
+      launch xdg-open "$url"
+    fi
     return
   fi
   if raw=$(link_url "$f") && [[ "$raw" == *:* ]]; then
@@ -2303,8 +2310,13 @@ cmd_open_link() {
   else
     why="There is no web link in it."
   fi
-  omarchy-notification-send "Can't open $(basename "$f")" "$why" >/dev/null 2>&1 \
-    || echo "omdrop: can't open $f: $why" >&2
+  if command -v omarchy-notification-send >/dev/null 2>&1; then
+    omarchy-notification-send "Can't open $(basename "$f")" "$why" >/dev/null 2>&1
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send -a "AirDrop" -t 8000 "Can't open $(basename "$f")" "$why" >/dev/null 2>&1 &
+  else
+    echo "omdrop: can't open $f: $why" >&2
+  fi
   return 1
 }
 
@@ -2558,9 +2570,18 @@ act_notify() {
   # claiming the urgency of one.
   local what="Saved to $(tildify "$(dirname "$f")")/"
   command -v wl-copy >/dev/null 2>&1 && what="Copied to clipboard, saved to $(tildify "$(dirname "$f")")/"
-  omarchy-notification-send -t 8000 "$(basename "$f")" "$what (or click this)" \
-    "${args[@]}" --exec "$SELF" act open "$f" >/dev/null \
-    || echo "omdrop: notification failed for $f" >&2
+  if command -v omarchy-notification-send >/dev/null 2>&1; then
+    omarchy-notification-send -t 8000 "$(basename "$f")" "$what (or click this)" \
+      "${args[@]}" --exec "$SELF" act open "$f" >/dev/null \
+      || echo "omdrop: notification failed for $f" >&2
+  elif command -v notify-send >/dev/null 2>&1; then
+    local notify_args=(-a "AirDrop" -t 8000)
+    [[ ${#args[@]} -gt 0 ]] && notify_args+=(-i "$f")
+    notify-send "${notify_args[@]}" "$(basename "$f")" "$what" >/dev/null 2>&1 \
+      || echo "omdrop: notification failed for $f" >&2
+  else
+    echo "omdrop: notification failed for $f" >&2
+  fi
 }
 
 # What to do with a file once the user has asked for it: `act open` is what the
@@ -2571,7 +2592,22 @@ cmd_act() {
   local dir; dir=$(dirname "$f")
   case "$what" in
     open)   act_open "$f" ;;
-    shell)  ( cd "$dir" && launch "$(omarchy-default-terminal)" ) ;;
+    shell)
+      local term=""
+      if command -v omarchy-default-terminal >/dev/null 2>&1; then
+        term="$(omarchy-default-terminal)"
+      elif [[ -n "${TERMINAL:-}" ]] && command -v "$TERMINAL" >/dev/null 2>&1; then
+        term="$TERMINAL"
+      else
+        for t in x-terminal-emulator kitty alacritty foot ghostty wezterm gnome-terminal konsole xterm; do
+          if command -v "$t" >/dev/null 2>&1; then
+            term="$t"
+            break
+          fi
+        done
+      fi
+      [[ -n "$term" ]] && ( cd "$dir" && launch "$term" )
+      ;;
     browse) launch xdg-open "$dir" ;;
     *) die "act $what: one of open, shell, browse" ;;
   esac
