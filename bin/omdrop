@@ -2570,14 +2570,16 @@ act_notify() {
   # claiming the urgency of one.
   local what="Saved to $(tildify "$(dirname "$f")")/"
   command -v wl-copy >/dev/null 2>&1 && what="Copied to clipboard, saved to $(tildify "$(dirname "$f")")/"
+  local title="AirDrop Received"
+  local desc="$(basename "$f")"$'\n'"$what"
   if command -v omarchy-notification-send >/dev/null 2>&1; then
-    omarchy-notification-send -t 8000 "$(basename "$f")" "$what (or click this)" \
+    omarchy-notification-send -t 8000 "$title" "$desc (or click this)" \
       "${args[@]}" --exec "$SELF" act open "$f" >/dev/null \
       || echo "omdrop: notification failed for $f" >&2
   elif command -v notify-send >/dev/null 2>&1; then
     local notify_args=(-a "AirDrop" -t 8000)
     [[ ${#args[@]} -gt 0 ]] && notify_args+=(-i "$f")
-    notify-send "${notify_args[@]}" "$(basename "$f")" "$what" >/dev/null 2>&1 \
+    notify-send "${notify_args[@]}" "$title" "$desc" >/dev/null 2>&1 \
       || echo "omdrop: notification failed for $f" >&2
   else
     echo "omdrop: notification failed for $f" >&2

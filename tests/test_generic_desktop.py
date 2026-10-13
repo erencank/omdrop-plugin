@@ -54,7 +54,8 @@ class GenericDesktopTests(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stderr)
 
         logs = self.logged()
-        self.assertTrue(any("notify-send|" in l and "photo.jpg" in l for l in logs), logs)
+        self.assertTrue(any("notify-send|" in l and "AirDrop Received" in l for l in logs), logs)
+        self.assertTrue(any("photo.jpg" in l for l in logs), logs)
         self.assertTrue(any("-a AirDrop" in l for l in logs), logs)
         self.assertTrue(any(f"-i {test_file}" in l for l in logs), logs)
 
